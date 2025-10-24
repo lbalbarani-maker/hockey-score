@@ -80,7 +80,7 @@ useEffect(() => {
       setMatchData(matchWithDuration);
       
       // ✅ NUEVO: Mostrar modal si es admin y el partido no está configurado
-      if (isAdmin && (!data.configured || data.configured === false)) {
+      if (isAdmin && (!data.configured)) {
         setShowSetupModal(true);
       }
     } else {
