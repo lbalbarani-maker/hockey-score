@@ -72,7 +72,7 @@ export default function TeamSetupModal({ isOpen, onSave }: TeamSetupModalProps) 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Equipo 1 */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-700">Equipo 1</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Equipo 1</h3>
             
             <div>
               <label className="block text-sm font-medium text-gray-600 mb-1">
@@ -136,7 +136,7 @@ export default function TeamSetupModal({ isOpen, onSave }: TeamSetupModalProps) 
 
           {/* Equipo 2 */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-700">Equipo 2</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Equipo 2</h3>
             
             <div>
               <label className="block text-sm font-medium text-gray-600 mb-1">
