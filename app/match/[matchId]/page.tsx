@@ -42,30 +42,40 @@ export default function MatchPage() {
   const [loading, setLoading] = useState(true);
   const [showSetupModal, setShowSetupModal] = useState(false);
 
-  // Efecto para el cronómetro en tiempo real
+    // Efecto para el cronómetro en tiempo real
   useEffect(() => {
     let interval: NodeJS.Timeout;
+    let lastUpdateTime = Date.now();
     
-    if (matchData?.running && isAdmin) { // ✅ Solo el admin controla el cronómetro
+    if (matchData?.running && isAdmin) {
       interval = setInterval(() => {
-        setMatchData(prev => {
-          if (!prev || prev.time <= 0) {
-            clearInterval(interval);
-            return prev;
-          }
-          return { ...prev, time: prev.time - 1 };
-        });
+        const now = Date.now();
+        const elapsedSeconds = Math.floor((now - lastUpdateTime) / 1000);
         
-        // Actualizar en Firebase cada segundo
-        if (matchData.time > 0) {
-          updateMatch({ time: matchData.time - 1 });
+        if (elapsedSeconds >= 1) {
+          setMatchData(prev => {
+            if (!prev || prev.time <= 0) {
+              clearInterval(interval);
+              return prev;
+            }
+            
+            const newTime = prev.time - elapsedSeconds;
+            lastUpdateTime = now;
+            
+            // Solo actualizar Firebase cada 10 segundos o cuando el tiempo cambie significativamente
+            if (newTime % 10 === 0 || newTime <= 0) {
+              updateMatch({ time: Math.max(0, newTime) });
+            }
+            
+            return { ...prev, time: Math.max(0, newTime) };
+          });
         }
-      }, 1000);
+      }, 100); // Verificar más frecuentemente pero actualizar menos
     }
 
     return () => clearInterval(interval);
-  }, [matchData?.running, matchData?.time, isAdmin]);
-
+  }, [matchData?.running, isAdmin]);
+  
   // Escuchar cambios en tiempo real de Firebase
 useEffect(() => {
   const matchRef = doc(db, 'matches', matchId);
