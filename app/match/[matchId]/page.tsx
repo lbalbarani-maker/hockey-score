@@ -75,7 +75,26 @@ export default function MatchPage() {
 
     return () => clearInterval(interval);
   }, [matchData?.running, isAdmin]);
-  
+
+   // Efecto para el cronómetro de espectadores
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
+    if (matchData?.running && !isAdmin) {
+      interval = setInterval(() => {
+        setMatchData(prev => {
+          if (!prev || !prev.running || prev.time <= 0) {
+            clearInterval(interval);
+            return prev;
+          }
+          return { ...prev, time: Math.max(0, prev.time - 1) };
+        });
+      }, 1000);
+    }
+
+    return () => clearInterval(interval);
+  }, [matchData?.running, isAdmin]); 
+
   // Escuchar cambios en tiempo real de Firebase
 useEffect(() => {
   const matchRef = doc(db, 'matches', matchId);
