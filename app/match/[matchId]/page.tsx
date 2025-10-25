@@ -80,6 +80,44 @@ const handleQuarterEnd = async (currentData: MatchData) => {
   }
 };
 
+// Efecto para mantener la pantalla activa en modo espectador
+useEffect(() => {
+  let wakeLock: any = null;
+
+  const requestWakeLock = async () => {
+    try {
+      // Solicitar Wake Lock (evita que la pantalla se apague)
+      if ('wakeLock' in navigator) {
+        wakeLock = await (navigator as any).wakeLock.request('screen');
+        console.log('Pantalla mantenida activa');
+      }
+    } catch (err) {
+      console.log('Wake Lock no soportado:', err);
+    }
+  };
+
+  const handleVisibilityChange = () => {
+    if (wakeLock !== null && document.visibilityState === 'visible') {
+      requestWakeLock();
+    }
+  };
+
+  // Solo activar para espectadores
+  if (!isAdmin) {
+    requestWakeLock();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+  }
+
+  return () => {
+    if (wakeLock !== null) {
+      wakeLock.release().then(() => {
+        wakeLock = null;
+      });
+    }
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+  };
+}, [isAdmin]);
+
  // Efecto para el cronómetro preciso (resiste pestañas inactivas)
 useEffect(() => {
   let animationFrameId: number;
