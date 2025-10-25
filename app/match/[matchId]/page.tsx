@@ -42,58 +42,106 @@ export default function MatchPage() {
   const [loading, setLoading] = useState(true);
   const [showSetupModal, setShowSetupModal] = useState(false);
 
-    // Efecto para el cronómetro en tiempo real
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    let lastUpdateTime = Date.now();
+ // Función para manejar el final del cuarto
+const handleQuarterEnd = async (currentData: MatchData) => {
+  // Pausar el partido
+  await updateMatch({ 
+    running: false,
+    status: 'paused'
+  });
+  
+  // Avanzar al siguiente cuarto si no es el último
+  if (currentData.quarter < 4) {
+    const nextQuarter = currentData.quarter + 1;
+    await updateMatch({ 
+      quarter: nextQuarter,
+      time: currentData.quarterDuration,
+      running: false
+    });
     
-    if (matchData?.running && isAdmin) {
-      interval = setInterval(() => {
-        const now = Date.now();
-        const elapsedSeconds = Math.floor((now - lastUpdateTime) / 1000);
-        
-        if (elapsedSeconds >= 1) {
-          setMatchData(prev => {
-            if (!prev || prev.time <= 0) {
-              clearInterval(interval);
-              return prev;
-            }
-            
-            const newTime = prev.time - elapsedSeconds;
-            lastUpdateTime = now;
-            
-            // Solo actualizar Firebase cada 10 segundos o cuando el tiempo cambie significativamente
-            if (newTime % 10 === 0 || newTime <= 0) {
-              updateMatch({ time: Math.max(0, newTime) });
-            }
-            
-            return { ...prev, time: Math.max(0, newTime) };
-          });
-        }
-      }, 100); // Verificar más frecuentemente pero actualizar menos
+    // Notificación solo para admin
+    if (isAdmin) {
+      setTimeout(() => {
+        alert(`🏑 Cuarto ${currentData.quarter} finalizado! Avanzando al cuarto ${nextQuarter}`);
+      }, 100);
+    }
+  } else {
+    // Último cuarto finalizado
+    await updateMatch({ 
+      status: 'finished',
+      running: false
+    });
+    
+    if (isAdmin) {
+      setTimeout(() => {
+        alert('🏁 Partido finalizado!');
+      }, 100);
+    }
+  }
+};
+
+// Efecto para el cronómetro preciso (tanto admin como espectadores)
+useEffect(() => {
+  let animationFrameId: number;
+  let lastTime: number | null = null;
+  let accumulatedTime = 0;
+
+  const updateTimer = (currentTime: number) => {
+    if (!matchData?.running) {
+      lastTime = null;
+      return;
     }
 
-    return () => clearInterval(interval);
-  }, [matchData?.running, isAdmin]);
+    if (lastTime === null) {
+      lastTime = currentTime;
+      animationFrameId = requestAnimationFrame(updateTimer);
+      return;
+    }
 
-   // Efecto para el cronómetro de espectadores
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    
-    if (matchData?.running && !isAdmin) {
-      interval = setInterval(() => {
-        setMatchData(prev => {
-          if (!prev || !prev.running || prev.time <= 0) {
-            clearInterval(interval);
-            return prev;
+    const delta = currentTime - lastTime;
+    lastTime = currentTime;
+    accumulatedTime += delta;
+
+    // Actualizar cada 1000ms (1 segundo) exactos
+    if (accumulatedTime >= 1000) {
+      setMatchData(prev => {
+        if (!prev || prev.time <= 0) {
+          // Manejar fin del cuarto
+          if (prev && prev.time <= 0 && prev.running) {
+            handleQuarterEnd(prev);
           }
-          return { ...prev, time: Math.max(0, prev.time - 1) };
-        });
-      }, 1000);
+          return prev;
+        }
+
+        const newTime = prev.time - 1;
+        
+        // Solo admin actualiza Firebase
+        if (isAdmin) {
+          // Actualizar Firebase cada 10 segundos o en momentos importantes
+          if (newTime % 10 === 0 || newTime <= 10) {
+            updateMatch({ time: newTime });
+          }
+        }
+
+        return { ...prev, time: newTime };
+      });
+
+      accumulatedTime = 0;
     }
 
-    return () => clearInterval(interval);
-  }, [matchData?.running, isAdmin]); 
+    animationFrameId = requestAnimationFrame(updateTimer);
+  };
+
+  if (matchData?.running) {
+    animationFrameId = requestAnimationFrame(updateTimer);
+  }
+
+  return () => {
+    if (animationFrameId) {
+      cancelAnimationFrame(animationFrameId);
+    }
+  };
+}, [matchData?.running, isAdmin, matchData?.time]);   
 
   // Escuchar cambios en tiempo real de Firebase
 useEffect(() => {
