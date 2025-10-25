@@ -336,12 +336,13 @@ const handleTeamSetupSave = async (teams: { team1: any; team2: any }) => {
             )}
           </div>
 
-          {/* Tiempo y Cuarto */}
-          <div className="text-center">
-            <div className="text-4xl font-mono font-bold text-white mb-2">
-              {formatTime(matchData.time)}
-            </div>
-            <div className="text-xl text-gray-300">Cuarto {matchData.quarter}</div>
+         {/* Tiempo y Cuarto */}
+<div className="text-center">
+  <div className={`font-mono font-bold text-white mb-2 ${!isAdmin ? 'text-6xl' : 'text-4xl'}`}>
+    {formatTime(matchData.time)}
+  </div>
+  <div className={`${!isAdmin ? 'text-2xl' : 'text-xl'} text-gray-300`}>Cuarto {matchData.quarter}</div>
+
             {matchData.running && <div className="text-blue-400 text-sm">▶ EN VIVO</div>}
             {matchData.status === 'paused' && <div className="text-yellow-400 text-sm">⏸ PAUSADO</div>}
             
