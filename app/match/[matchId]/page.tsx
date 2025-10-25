@@ -198,8 +198,26 @@ useEffect(() => {
   };
 
   // Controles del partido (solo para admin)
-  const startMatch = () => updateMatch({ running: true, status: 'active' });
-  const pauseMatch = () => updateMatch({ running: false, status: 'paused' });
+const startMatch = () => {
+  if (!matchData) return;
+  
+  // ✅ Forzar actualización inmediata al iniciar también
+  updateMatch({ 
+    running: true, 
+    status: 'active',
+    time: matchData.time // Tiempo exacto actual
+  });
+};
+const pauseMatch = () => {
+  if (!matchData) return;
+  
+  // ✅ Forzar actualización inmediata con el tiempo EXACTO actual
+  updateMatch({ 
+    running: false, 
+    status: 'paused',
+    time: matchData.time // Este es el tiempo exacto del cronómetro local
+  });
+};
   const setQuarter = (quarter: number) => {
     if (!matchData) return;
     updateMatch({ 
@@ -225,13 +243,15 @@ useEffect(() => {
     });
   };
   
-  const resetQuarter = () => {
-    if (!matchData) return;
-    updateMatch({ 
-      time: matchData.quarterDuration, 
-      running: false 
-    });
-  };
+const resetQuarter = () => {
+  if (!matchData) return;
+  
+  // ✅ Usar quarterDuration actual, no un valor fijo
+  updateMatch({ 
+    time: matchData.quarterDuration, 
+    running: false 
+  });
+};
 
 // Función para guardar la configuración de equipos
 const handleTeamSetupSave = async (teams: { team1: any; team2: any }) => {
