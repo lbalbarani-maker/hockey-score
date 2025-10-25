@@ -80,41 +80,39 @@ const handleQuarterEnd = async (currentData: MatchData) => {
   }
 };
 
-// Efecto para el cronómetro preciso (tanto admin como espectadores)
+ // Efecto para el cronómetro preciso (resiste pestañas inactivas)
 useEffect(() => {
   let animationFrameId: number;
-  let lastTime: number | null = null;
-  let accumulatedTime = 0;
+  let startTime: number | null = null;
+  let expectedTime = matchData?.time || 0;
 
   const updateTimer = (currentTime: number) => {
     if (!matchData?.running) {
-      lastTime = null;
+      startTime = null;
       return;
     }
 
-    if (lastTime === null) {
-      lastTime = currentTime;
+    if (startTime === null) {
+      startTime = currentTime;
       animationFrameId = requestAnimationFrame(updateTimer);
       return;
     }
 
-    const delta = currentTime - lastTime;
-    lastTime = currentTime;
-    accumulatedTime += delta;
-
-    // Actualizar cada 1000ms (1 segundo) exactos
-    if (accumulatedTime >= 1000) {
+    const elapsed = currentTime - startTime;
+    const elapsedSeconds = Math.floor(elapsed / 1000);
+    
+    if (elapsedSeconds >= 1) {
+      const newTime = Math.max(0, expectedTime - elapsedSeconds);
+      
       setMatchData(prev => {
-        if (!prev || prev.time <= 0) {
+        if (!prev || newTime <= 0) {
           // Manejar fin del cuarto
-          if (prev && prev.time <= 0 && prev.running) {
+          if (prev && newTime <= 0 && prev.running) {
             handleQuarterEnd(prev);
           }
-          return prev;
+          return prev ? { ...prev, time: newTime } : prev;
         }
 
-        const newTime = prev.time - 1;
-        
         // Solo admin actualiza Firebase
         if (isAdmin) {
           // Actualizar Firebase cada 10 segundos o en momentos importantes
@@ -126,13 +124,17 @@ useEffect(() => {
         return { ...prev, time: newTime };
       });
 
-      accumulatedTime = 0;
+      expectedTime = newTime;
+      startTime = currentTime;
     }
 
     animationFrameId = requestAnimationFrame(updateTimer);
   };
 
   if (matchData?.running) {
+    // Reiniciar el cálculo cuando se reanuda
+    expectedTime = matchData.time;
+    startTime = null;
     animationFrameId = requestAnimationFrame(updateTimer);
   }
 
@@ -141,7 +143,7 @@ useEffect(() => {
       cancelAnimationFrame(animationFrameId);
     }
   };
-}, [matchData?.running, isAdmin, matchData?.time]);   
+}, [matchData?.running, isAdmin, matchData?.time]);  
 
   // Escuchar cambios en tiempo real de Firebase
 useEffect(() => {
