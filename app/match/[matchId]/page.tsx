@@ -548,18 +548,12 @@ const handleTeamSetupSave = async (teams: { team1: any; team2: any }) => {
       {!isAdmin && (
         <div className="text-center text-gray-400 mt-8">
          
- {/* ✅ NUEVO: Indicador Wake Lock */}
-          <div className="mt-4 flex items-center justify-center gap-2">
-            <div className={`w-3 h-3 rounded-full ${wakeLockActive ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}></div>
-            <span className="text-xs text-gray-500">
-              {wakeLockActive ? 'Pantalla activa' : 'Pantalla normal'}
-            </span>
-          </div>
+ 
           
           {/* Logo de Sponsor */}
 {matchData.sponsorLogo && matchData.sponsorLogo !== "" && (
                 <div className="mt-6 p-4 bg-white/5 rounded-lg">
-              <p className="text-sm text-gray-400 mb-2">Partido patrocinado por:</p>
+              <p className="text-sm text-gray-400 mb-2">Patrocinador:</p>
               <img 
                 src={matchData.sponsorLogo} 
                 alt="Sponsor" 
@@ -567,6 +561,16 @@ const handleTeamSetupSave = async (teams: { team1: any; team2: any }) => {
               />
             </div>
           )}
+        </div>
+      )}
+
+{/* ✅ NUEVO: Indicador Wake Lock (DEBAJO del sponsor) */}
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <div className={`w-3 h-3 rounded-full ${wakeLockActive ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}></div>
+            <span className="text-xs text-gray-500">
+              {wakeLockActive ? 'Pantalla activa' : 'Pantalla normal'}
+            </span>
+          </div>
         </div>
       )}
 
