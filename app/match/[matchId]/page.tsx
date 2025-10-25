@@ -41,6 +41,7 @@ export default function MatchPage() {
   const [matchData, setMatchData] = useState<MatchData | null>(null);
   const [loading, setLoading] = useState(true);
   const [showSetupModal, setShowSetupModal] = useState(false);
+  const [wakeLockActive, setWakeLockActive] = useState(false);
 
  // Función para manejar el final del cuarto
 const handleQuarterEnd = async (currentData: MatchData) => {
@@ -89,10 +90,12 @@ useEffect(() => {
       // Solicitar Wake Lock (evita que la pantalla se apague)
       if ('wakeLock' in navigator) {
         wakeLock = await (navigator as any).wakeLock.request('screen');
+        setWakeLockActive(true);
         console.log('Pantalla mantenida activa');
       }
     } catch (err) {
       console.log('Wake Lock no soportado:', err);
+      setWakeLockActive(false);
     }
   };
 
@@ -112,9 +115,11 @@ useEffect(() => {
     if (wakeLock !== null) {
       wakeLock.release().then(() => {
         wakeLock = null;
+        setWakeLockActive(false);
       });
     }
     document.removeEventListener('visibilitychange', handleVisibilityChange);
+    setWakeLockActive(false);
   };
 }, [isAdmin]);
 
@@ -543,7 +548,13 @@ const handleTeamSetupSave = async (teams: { team1: any; team2: any }) => {
       {!isAdmin && (
         <div className="text-center text-gray-400 mt-8">
          
-          
+ {/* ✅ NUEVO: Indicador Wake Lock */}
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <div className={`w-3 h-3 rounded-full ${wakeLockActive ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}></div>
+            <span className="text-xs text-gray-500">
+              {wakeLockActive ? 'Pantalla activa' : 'Pantalla normal'}
+            </span>
+          </div>
           
           {/* Logo de Sponsor */}
 {matchData.sponsorLogo && matchData.sponsorLogo !== "" && (
