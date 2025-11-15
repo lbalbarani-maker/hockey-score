@@ -125,27 +125,33 @@ export default function MatchPage() {
   // Efecto para el cronómetro preciso - CORREGIDO
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
+    let localTime = matchData?.time || 0;
 
-    if (matchData?.running) {
+    if (matchData?.running && localTime > 0) {
+      // Inicializar el tiempo local
+      localTime = matchData.time;
+      
       intervalId = setInterval(() => {
+        localTime--;
+        
+        // Actualizar UI localmente
         setMatchData(prev => {
           if (!prev) return prev;
           
-          const newTime = Math.max(0, prev.time - 1);
-          
-          // Si el tiempo llega a 0, manejar fin del cuarto
-          if (newTime <= 0 && prev.running) {
+          if (localTime <= 0) {
+            // Finalizar cuarto
             handleQuarterEnd(prev);
             return { ...prev, time: 0, running: false };
           }
           
-          // Solo admin actualiza Firebase cada 5 segundos
-          if (isAdmin && newTime > 0 && (newTime % 5 === 0 || newTime <= 10)) {
-            updateMatch({ time: newTime });
-          }
-          
-          return { ...prev, time: newTime };
+          return { ...prev, time: localTime };
         });
+        
+        // Solo actualizar Firebase cada 10 segundos o en los últimos 10 segundos
+        if (isAdmin && (localTime % 10 === 0 || localTime <= 10)) {
+          updateMatch({ time: localTime });
+        }
+        
       }, 1000);
     }
 
@@ -156,20 +162,32 @@ export default function MatchPage() {
     };
   }, [matchData?.running, isAdmin]);
 
-  // Escuchar cambios en tiempo real de Firebase
+  // Escuchar cambios en tiempo real de Firebase - CORREGIDO
   useEffect(() => {
     const matchRef = doc(db, 'matches', matchId);
 
     const unsubscribe = onSnapshot(matchRef, (docSnapshot) => {
       if (docSnapshot.exists()) {
         const data = docSnapshot.data() as MatchData;
-        const matchWithDuration = {
-          ...data,
-          quarterDuration: data.quarterDuration || 600
-        };
-        setMatchData(matchWithDuration);
+        
+        // Si el partido está corriendo y somos admin, NO actualizamos el tiempo desde Firebase
+        // para evitar conflictos con nuestro cronómetro local
+        if (isAdmin && data.running) {
+          const matchWithDuration = {
+            ...data,
+            time: matchData?.time !== undefined ? matchData.time : data.time, // Mantener nuestro tiempo local
+            quarterDuration: data.quarterDuration || 600
+          };
+          setMatchData(matchWithDuration);
+        } else {
+          // Para espectadores o partidos pausados, usar el tiempo de Firebase normalmente
+          const matchWithDuration = {
+            ...data,
+            quarterDuration: data.quarterDuration || 600
+          };
+          setMatchData(matchWithDuration);
+        }
 
-        // ✅ NUEVO: Mostrar modal si es admin y el partido no está configurado
         if (isAdmin && (!data.configured)) {
           setShowSetupModal(true);
         }
@@ -218,15 +236,6 @@ export default function MatchPage() {
     });
   };
 
-  const pauseMatch = () => {
-    if (!matchData) return;
-
-    updateMatch({
-      running: false,
-      status: 'paused'
-    });
-  };
-
   const setQuarter = (quarter: number) => {
     if (!matchData) return;
     updateMatch({
@@ -236,7 +245,6 @@ export default function MatchPage() {
     });
   };
 
-  // CORREGIDO: Funciones de gol que no interfieren con el cronómetro
   const addGoal = (team: 'team1' | 'team2') => {
     if (!matchData) return;
     const newScore = matchData.score[team] + 1;
@@ -493,13 +501,7 @@ export default function MatchPage() {
             >
               ▶ Iniciar
             </button>
-            <button
-              onClick={pauseMatch}
-              disabled={!matchData.running}
-              className="bg-yellow-500 hover:bg-yellow-600 disabled:bg-yellow-800 text-white font-bold py-3 rounded-lg transition-all"
-            >
-              ⏸ Pausar
-            </button>
+            {/* Botón de pausar eliminado según tu requerimiento */}
           </div>
           <div className="grid grid-cols-4 gap-2 mb-4">
             {[1, 2, 3, 4].map((quarter) => (
