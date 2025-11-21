@@ -518,47 +518,70 @@ export default function MatchPage() {
       )}
 
       {/* ANIMACIONES PARA ESPECTADOR */}
-      {/* GOAL */}
-      {!isAdmin && visibleEvent === 'goal' && (
-        <>
-          {/* Texto grande central */}
-          <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-50">
-            <div className="text-6xl font-extrabold text-yellow-400 drop-shadow-xl animate-wiggle">¡¡¡GOOOOOL!!! 🎉</div>
-          </div>
-
-          {/* Confetti pieces */}
-          {Array.from({ length: 40 }).map((_, i) => {
-            const left = Math.random() * 100;
-            const delay = Math.random() * 0.6;
-            const hue = Math.random() * 360;
-            const size = 6 + Math.random() * 12;
-            return (
-              <div
-                key={`conf-${i}`}
-                className="confetti-piece"
-                style={{
-                  left: `${left}vw`,
-                  background: `linear-gradient(45deg, hsl(${hue} 80% 55%), hsl(${(hue + 60) % 360} 80% 55%))`,
-                  width: `${size}px`,
-                  height: `${size * 1.6}px`,
-                  animation: `confetti-fall ${1.4 + Math.random() * 0.8}s linear ${delay}s forwards`
-                }}
-              />
-            );
-          })}
-        </>
-      )}
-
-      {/* SAVE / ATAJADA */}
-      {!isAdmin && visibleEvent === 'save' && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
-          <div className="text-5xl font-extrabold text-cyan-200 drop-shadow-xl text-center animate-wiggle">
-            🧤 ¡Atajada!<br />✨ ¡Aquí nooooo! ✨
-          </div>
-        </div>
-      )}
-
-      <TeamSetupModal isOpen={showSetupModal} onSave={handleTeamSetupSave} />
+{/* GOAL */}
+{!isAdmin && visibleEvent === 'goal' && (
+  <>
+    {/* Texto grande central */}
+    <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-50">
+      <div className="text-10xl font-extrabold text-yellow-400 drop-shadow-xl animate-wiggle">🎉🏑 ¡¡¡GOOOOOL!!! 🏑🎉</div>
     </div>
-  );
+
+    {/* Confetti pieces */}
+    {Array.from({ length: 40 }).map((_, i) => {
+      const left = Math.random() * 100;
+      const delay = Math.random() * 0.6;
+      const hue = Math.random() * 360;
+      const size = 6 + Math.random() * 12;
+      return (
+        <div
+          key={`conf-${i}`}
+          className="confetti-piece"
+          style={{
+            left: `${left}vw`,
+            background: `linear-gradient(45deg, hsl(${hue} 80% 55%), hsl(${(hue + 60) % 360} 80% 55%))`,
+            width: `${size}px`,
+            height: `${size * 1.6}px`,
+            animation: `confetti-fall ${1.4 + Math.random() * 0.8}s linear ${delay}s forwards`
+          }}
+        />
+      );
+    })}
+  </>
+)}
+
+{/* SAVE / ATAJADA */}
+{!isAdmin && visibleEvent === 'save' && (
+  <>
+    <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
+      <div className="text-10xl font-extrabold text-yellow-400 drop-shadow-xl animate-wiggle">
+        🧤🥅🏑 ¡QUE ATAJADAAAAAA!<br />✨ ¡Aquí nooooo! 🧱🧱🧱 ✨
+      </div>
+    </div>
+
+    {/* Confetti pieces */}
+    {Array.from({ length: 40 }).map((_, i) => {
+      const left = Math.random() * 100;
+      const delay = Math.random() * 0.6;
+      const hue = Math.random() * 360;
+      const size = 6 + Math.random() * 12;
+      return (
+        <div
+          key={`conf-${i}`}
+          className="confetti-piece"
+          style={{
+            left: `${left}vw`,
+            background: `linear-gradient(45deg, hsl(${hue} 80% 55%), hsl(${(hue + 60) % 360} 80% 55%))`,
+            width: `${size}px`,
+            height: `${size * 1.6}px`,
+            animation: `confetti-fall ${1.4 + Math.random() * 0.8}s linear ${delay}s forwards`
+          }}
+        />
+      );
+    })}
+  </>
+)}
+
+<TeamSetupModal isOpen={showSetupModal} onSave={handleTeamSetupSave} />
+</div>
+);
 }
