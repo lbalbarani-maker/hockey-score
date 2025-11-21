@@ -17,6 +17,7 @@ interface MatchData {
   // Estado del partido en la base de datos
   quarter: number;
   teams: { team1: Team; team2: Team };
+  
   score: { team1: number; team2: number };
   running: boolean;
   status: 'active' | 'paused' | 'finished';
