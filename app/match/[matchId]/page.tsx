@@ -523,7 +523,7 @@ export default function MatchPage() {
   <>
     {/* Texto grande central */}
     <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-50">
-      <div className="text-10xl font-extrabold text-yellow-400 drop-shadow-xl animate-wiggle">🎉🏑 ¡¡¡GOOOOOL!!! 🏑🎉</div>
+      <div className="text-7xl font-extrabold text-yellow-400 drop-shadow-xl animate-wiggle">🎉🏑 ¡¡¡GOOOOOL!!! 🏑🎉</div>
     </div>
 
     {/* Confetti pieces */}
@@ -553,7 +553,7 @@ export default function MatchPage() {
 {!isAdmin && visibleEvent === 'save' && (
   <>
     <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
-      <div className="text-10xl font-extrabold text-yellow-400 drop-shadow-xl animate-wiggle">
+      <div className="text-7xl font-extrabold text-yellow-400 drop-shadow-xl animate-wiggle">
         🧤🥅🏑 ¡QUE ATAJADAAAAAA!<br />✨ ¡Aquí nooooo! 🧱🧱🧱 ✨
       </div>
     </div>
