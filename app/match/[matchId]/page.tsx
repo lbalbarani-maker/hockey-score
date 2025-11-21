@@ -13,11 +13,15 @@ interface Team {
   color: string;
 }
 
+interface MatchEvent {
+  type: 'goal' | 'save';
+  timestamp: number;
+}
+
 interface MatchData {
   // Estado del partido en la base de datos
   quarter: number;
   teams: { team1: Team; team2: Team };
-  
   score: { team1: number; team2: number };
   running: boolean;
   status: 'active' | 'paused' | 'finished';
@@ -26,10 +30,11 @@ interface MatchData {
   sponsorLogo: string;
 
   // NUEVOS CAMPOS para un cronómetro sólido
-  // remaining: segundos que quedan en el cuarto en el momento en que se PRESASIONÓ start o pause
   remaining?: number; // en segundos
-  // startTime: timestamp (ms epoch) que indica cuando el admin empezó el conteo. Null si no está corriendo.
   startTime?: number | null; // ms
+
+  // Evento para animaciones sincronizadas
+  event?: MatchEvent | null;
 }
 
 export default function MatchPage() {
@@ -45,6 +50,9 @@ export default function MatchPage() {
 
   // Estado local para mostrar el tiempo calculado (no proviene directamente de Firestore)
   const [displayTime, setDisplayTime] = useState<number>(0);
+
+  // Estado local para la animación visible en espectador
+  const [visibleEvent, setVisibleEvent] = useState<'goal' | 'save' | null>(null);
 
   // Ref para almacenar el último snapshot recibido y evitar dependencias problemáticas
   const matchDataRef = useRef<MatchData | null>(null);
@@ -137,7 +145,8 @@ export default function MatchPage() {
           configured: data.configured ?? false,
           sponsorLogo: data.sponsorLogo ?? '',
           remaining: remainingFromDoc ?? (data.quarterDuration ?? 600),
-          startTime: data.startTime ?? null
+          startTime: data.startTime ?? null,
+          event: data.event ?? null
         };
 
         matchDataRef.current = mapped;
@@ -161,7 +170,8 @@ export default function MatchPage() {
             configured: false,
             sponsorLogo: '',
             remaining: 600,
-            startTime: null
+            startTime: null,
+            event: null
           };
 
           setDoc(matchRef, newMatch);
@@ -220,6 +230,19 @@ export default function MatchPage() {
       if (rafId) cancelAnimationFrame(rafId);
     };
   }, [matchData?.running, matchData?.startTime, matchData?.remaining]);
+
+  // ---------- Effect: mostrar animación cuando cambia matchData.event ----------
+  useEffect(() => {
+    if (!matchData?.event) return;
+
+    // Guardamos el tipo y lo mostramos localmente para la UI de espectador
+    setVisibleEvent(matchData.event.type);
+
+    // Ocultar la animación a los 3s
+    const t = setTimeout(() => setVisibleEvent(null), 3000);
+    return () => clearTimeout(t);
+    // dependemos del timestamp para reaccionar a nuevos eventos aunque tipo sea igual
+  }, [matchData?.event?.timestamp]);
 
   // ---------- Helpers para actualizar Firestore (solo admin) ----------
   const updateMatch = async (updates: Partial<MatchData>) => {
@@ -312,6 +335,17 @@ export default function MatchPage() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // ---------- EVENTOS: disparar eventos sincronizados (solo admin) ----------
+  const triggerEvent = async (type: 'goal' | 'save') => {
+    if (!isAdmin) return;
+    await updateMatch({
+      event: {
+        type,
+        timestamp: Date.now()
+      }
+    });
+  };
+
   // ---------- Renderizado ----------
   if (loading) {
     return (
@@ -335,6 +369,32 @@ export default function MatchPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 p-8">
+      {/* Global animation styles (confetti etc) */}
+      <style jsx global>{`
+        .confetti-piece {
+          position: fixed;
+          top: -10px;
+          width: 10px;
+          height: 14px;
+          opacity: 0.95;
+          z-index: 9999;
+          pointer-events: none;
+          transform-origin: center;
+        }
+        @keyframes confetti-fall {
+          0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+          100% { transform: translateY(110vh) rotate(720deg); opacity: 0.9; }
+        }
+        @keyframes wiggle {
+          0% { transform: translateX(0) rotate(0deg); }
+          25% { transform: translateX(-8px) rotate(-6deg); }
+          50% { transform: translateX(8px) rotate(6deg); }
+          75% { transform: translateX(-4px) rotate(-3deg); }
+          100% { transform: translateX(0) rotate(0deg); }
+        }
+        .animate-wiggle { animation: wiggle 0.9s ease-in-out both; }
+      `}</style>
+
       {/* Header */}
       <div className="text-center mb-8">
         <h1 className="text-4xl font-bold text-white mb-2">🏑 Partido en Vivo</h1>
@@ -420,6 +480,23 @@ export default function MatchPage() {
             <button onClick={resetQuarter} className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 rounded-lg transition-all">Reiniciar Cuarto</button>
             <button onClick={copySpectatorLink} className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 rounded-lg transition-all">📋 Copiar Enlace</button>
           </div>
+
+          {/* BOTONES DE ANIMACIÓN (ADMIN): disparan evento en Firestore */}
+          <div className="grid grid-cols-2 gap-4 mt-6">
+            <button
+              onClick={() => triggerEvent('goal')}
+              className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg"
+            >
+              🎉 GOL
+            </button>
+
+            <button
+              onClick={() => triggerEvent('save')}
+              className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-lg"
+            >
+              🧤 ATAJADA
+            </button>
+          </div>
         </div>
       )}
 
@@ -436,6 +513,47 @@ export default function MatchPage() {
           <div className="mt-4 flex items-center justify-center gap-2">
             <div className={`w-3 h-3 rounded-full ${wakeLockActive ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}></div>
             <span className="text-xs text-gray-500">{wakeLockActive ? 'Pantalla activa' : 'Pantalla normal'}</span>
+          </div>
+        </div>
+      )}
+
+      {/* ANIMACIONES PARA ESPECTADOR */}
+      {/* GOAL */}
+      {!isAdmin && visibleEvent === 'goal' && (
+        <>
+          {/* Texto grande central */}
+          <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-50">
+            <div className="text-6xl font-extrabold text-yellow-400 drop-shadow-xl animate-wiggle">¡¡¡GOOOOOL!!! 🎉</div>
+          </div>
+
+          {/* Confetti pieces */}
+          {Array.from({ length: 40 }).map((_, i) => {
+            const left = Math.random() * 100;
+            const delay = Math.random() * 0.6;
+            const hue = Math.random() * 360;
+            const size = 6 + Math.random() * 12;
+            return (
+              <div
+                key={`conf-${i}`}
+                className="confetti-piece"
+                style={{
+                  left: `${left}vw`,
+                  background: `linear-gradient(45deg, hsl(${hue} 80% 55%), hsl(${(hue + 60) % 360} 80% 55%))`,
+                  width: `${size}px`,
+                  height: `${size * 1.6}px`,
+                  animation: `confetti-fall ${1.4 + Math.random() * 0.8}s linear ${delay}s forwards`
+                }}
+              />
+            );
+          })}
+        </>
+      )}
+
+      {/* SAVE / ATAJADA */}
+      {!isAdmin && visibleEvent === 'save' && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
+          <div className="text-5xl font-extrabold text-cyan-200 drop-shadow-xl text-center animate-wiggle">
+            🧤 ¡Atajada!<br />✨ ¡Aquí nooooo! ✨
           </div>
         </div>
       )}
