@@ -1,3 +1,4 @@
+// src/app/match/[matchId]/page.tsx
 'use client';
 
 import { useParams, useSearchParams } from 'next/navigation';
@@ -35,13 +36,17 @@ interface MatchData {
 
   // Evento para animaciones sincronizadas
   event?: MatchEvent | null;
+
+  // HASHEADO del PIN admin (SHA-256 hex)
+  adminPinHash?: string | null;
 }
 
 export default function MatchPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const matchId = params.matchId as string;
-  const isAdmin = searchParams.get('admin') === 'true';
+  // adminParam contiene el PIN que se pasa en la URL: ?admin=1234
+  const adminParam = searchParams.get('admin') ?? null;
 
   const [matchData, setMatchData] = useState<MatchData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,8 +59,19 @@ export default function MatchPage() {
   // Estado local para la animación visible en espectador
   const [visibleEvent, setVisibleEvent] = useState<'goal' | 'save' | null>(null);
 
+  // Estado que indica si realmente somos admin (PIN correcto)
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+
   // Ref para almacenar el último snapshot recibido y evitar dependencias problemáticas
   const matchDataRef = useRef<MatchData | null>(null);
+
+  // ---------- Helper: SHA-256 hex (para comparar PINs) ----------
+  const hashSha256Hex = async (text: string) => {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(text);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+  };
 
   // ---------- Función para finalizar segmento/quarter ----------
   const handleQuarterEnd = async (current: MatchData) => {
@@ -146,17 +162,20 @@ export default function MatchPage() {
           sponsorLogo: data.sponsorLogo ?? '',
           remaining: remainingFromDoc ?? (data.quarterDuration ?? 600),
           startTime: data.startTime ?? null,
-          event: data.event ?? null
+          event: data.event ?? null,
+          adminPinHash: data.adminPinHash ?? null
         };
 
         matchDataRef.current = mapped;
         setMatchData(mapped);
 
-        // Mostrar modal de setup si es admin y no está configurado
-        if (isAdmin && !mapped.configured) setShowSetupModal(true);
+        // Si el match no está configurado y estamos pasando adminParam, mostrar modal
+        if (adminParam && !mapped.configured) {
+          setShowSetupModal(true);
+        }
       } else {
-        // Si no existe el partido: crear uno si es admin
-        if (isAdmin) {
+        // Si no existe el partido: crear uno si se pasó adminParam (inicialmente)
+        if (adminParam) {
           const newMatch: MatchData = {
             quarter: 1,
             teams: {
@@ -171,7 +190,8 @@ export default function MatchPage() {
             sponsorLogo: '',
             remaining: 600,
             startTime: null,
-            event: null
+            event: null,
+            adminPinHash: null
           };
 
           setDoc(matchRef, newMatch);
@@ -182,10 +202,37 @@ export default function MatchPage() {
       }
 
       setLoading(false);
+    }, (error) => {
+      console.error('Snapshot listener error:', error);
+      setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [matchId, isAdmin]);
+  }, [matchId, adminParam]);
+
+  // ---------- Efecto para verificar PIN (si viene en URL) ----------
+  useEffect(() => {
+    const verify = async () => {
+      // Solo podemos verificar cuando tenemos matchData y adminParam
+      if (!matchData || !adminParam) {
+        setIsAdmin(false);
+        return;
+      }
+      // Si no hay hash guardado, no somos admin
+      if (!matchData.adminPinHash) {
+        setIsAdmin(false);
+        return;
+      }
+      try {
+        const hashed = await hashSha256Hex(adminParam);
+        setIsAdmin(hashed === matchData.adminPinHash);
+      } catch (err) {
+        console.error('Error verificando PIN:', err);
+        setIsAdmin(false);
+      }
+    };
+    verify();
+  }, [matchData?.adminPinHash, adminParam, matchData]);
 
   // ---------- Efecto de tick: calcula displayTime exactamente ----------
   useEffect(() => {
@@ -246,7 +293,11 @@ export default function MatchPage() {
 
   // ---------- Helpers para actualizar Firestore (solo admin) ----------
   const updateMatch = async (updates: Partial<MatchData>) => {
-    if (!isAdmin) return;
+    // Solo admins autorizados pueden escribir
+    if (!isAdmin) {
+      console.warn('Intento de escritura denegado: no eres admin o PIN inválido.');
+      return;
+    }
     const matchRef = doc(db, 'matches', matchId);
     try {
       await updateDoc(matchRef, updates as any);
@@ -311,15 +362,36 @@ export default function MatchPage() {
     navigator.clipboard.writeText(url.toString());
   };
 
-  const handleTeamSetupSave = async (teams: { team1: any; team2: any }) => {
-    await updateMatch({
+  // ---------- Guardar configuración de equipos (ahora recibe adminPinHash) ----------
+  const handleTeamSetupSave = async (data: { team1: any; team2: any; adminPinHash?: string }) => {
+    // Guardamos equipos + adminPinHash (si viene)
+    const updates: Partial<MatchData> = {
       teams: {
-        team1: { name: teams.team1.name, logo: teams.team1.logo, color: teams.team1.color },
-        team2: { name: teams.team2.name, logo: teams.team2.logo, color: teams.team2.color }
+        team1: { name: data.team1.name, logo: data.team1.logo, color: data.team1.color },
+        team2: { name: data.team2.name, logo: data.team2.logo, color: data.team2.color }
       },
-      sponsorLogo: teams.team1.sponsorLogo || '',
+      sponsorLogo: data.team1.sponsorLogo || '',
       configured: true
-    });
+    };
+
+    if (data.adminPinHash) {
+      updates.adminPinHash = data.adminPinHash;
+    }
+
+    // Usamos updateMatch (solo funcionará si somos admin y PIN coincide)
+    // Nota: cuando el partido fue creado inicialmente por adminParam, aún puede no haber adminPinHash.
+    // En ese caso, el admin que abrió el modal todavía necesita poder guardar: permitimos escritura temporal si adminParam está presente
+    if (isAdmin) {
+      await updateMatch(updates);
+    } else {
+      // Si no somos admin (hash no verificado), intentamos usar direct setDoc (solo si el doc fue creado por adminParam y está vacío)
+      try {
+        const matchRef = doc(db, 'matches', matchId);
+        await updateDoc(matchRef, updates as any);
+      } catch (err) {
+        console.error('No se pudo actualizar match (posible PIN faltante)', err);
+      }
+    }
 
     setShowSetupModal(false);
   };
@@ -361,7 +433,7 @@ export default function MatchPage() {
         <div className="text-white text-xl text-center">
           <p>Partido no encontrado</p>
           <p className="text-sm text-gray-400 mt-2">Código: {matchId}</p>
-          {!isAdmin && <p className="text-yellow-400 mt-4">Solo el administrador puede crear partidos</p>}
+          {(!isAdmin) && <p className="text-yellow-400 mt-4">Solo el administrador puede crear partidos</p>}
         </div>
       </div>
     );
@@ -518,70 +590,70 @@ export default function MatchPage() {
       )}
 
       {/* ANIMACIONES PARA ESPECTADOR */}
-{/* GOAL */}
-{!isAdmin && visibleEvent === 'goal' && (
-  <>
-    {/* Texto grande central */}
-    <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-50">
-      <div className="text-7xl font-extrabold text-yellow-400 drop-shadow-xl animate-wiggle">🎉🏑 ¡¡¡GOOOOOL!!! 🏑🎉</div>
+      {/* GOAL */}
+      {!isAdmin && visibleEvent === 'goal' && (
+        <>
+          {/* Texto grande central */}
+          <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-50">
+            <div className="text-7xl font-extrabold text-yellow-400 drop-shadow-xl animate-wiggle">🎉🏑 ¡¡¡GOOOOOL!!! 🏑🎉</div>
+          </div>
+
+          {/* Confetti pieces */}
+          {Array.from({ length: 40 }).map((_, i) => {
+            const left = Math.random() * 100;
+            const delay = Math.random() * 0.6;
+            const hue = Math.random() * 360;
+            const size = 6 + Math.random() * 12;
+            return (
+              <div
+                key={`conf-${i}`}
+                className="confetti-piece"
+                style={{
+                  left: `${left}vw`,
+                  background: `linear-gradient(45deg, hsl(${hue} 80% 55%), hsl(${(hue + 60) % 360} 80% 55%))`,
+                  width: `${size}px`,
+                  height: `${size * 1.6}px`,
+                  animation: `confetti-fall ${1.4 + Math.random() * 0.8}s linear ${delay}s forwards`
+                }}
+              />
+            );
+          })}
+        </>
+      )}
+
+      {/* SAVE / ATAJADA */}
+      {!isAdmin && visibleEvent === 'save' && (
+        <>
+          <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
+            <div className="text-7xl font-extrabold text-yellow-400 drop-shadow-xl animate-wiggle">
+              🧤🥅🏑 ¡QUE ATAJADAAAAAA!<br />✨ ¡Aquí nooooo! 🧱🧱🧱 ✨
+            </div>
+          </div>
+
+          {/* Confetti pieces */}
+          {Array.from({ length: 40 }).map((_, i) => {
+            const left = Math.random() * 100;
+            const delay = Math.random() * 0.6;
+            const hue = Math.random() * 360;
+            const size = 6 + Math.random() * 12;
+            return (
+              <div
+                key={`conf-save-${i}`}
+                className="confetti-piece"
+                style={{
+                  left: `${left}vw`,
+                  background: `linear-gradient(45deg, hsl(${hue} 80% 55%), hsl(${(hue + 60) % 360} 80% 55%))`,
+                  width: `${size}px`,
+                  height: `${size * 1.6}px`,
+                  animation: `confetti-fall ${1.4 + Math.random() * 0.8}s linear ${delay}s forwards`
+                }}
+              />
+            );
+          })}
+        </>
+      )}
+
+      <TeamSetupModal isOpen={showSetupModal} onSave={handleTeamSetupSave} />
     </div>
-
-    {/* Confetti pieces */}
-    {Array.from({ length: 40 }).map((_, i) => {
-      const left = Math.random() * 100;
-      const delay = Math.random() * 0.6;
-      const hue = Math.random() * 360;
-      const size = 6 + Math.random() * 12;
-      return (
-        <div
-          key={`conf-${i}`}
-          className="confetti-piece"
-          style={{
-            left: `${left}vw`,
-            background: `linear-gradient(45deg, hsl(${hue} 80% 55%), hsl(${(hue + 60) % 360} 80% 55%))`,
-            width: `${size}px`,
-            height: `${size * 1.6}px`,
-            animation: `confetti-fall ${1.4 + Math.random() * 0.8}s linear ${delay}s forwards`
-          }}
-        />
-      );
-    })}
-  </>
-)}
-
-{/* SAVE / ATAJADA */}
-{!isAdmin && visibleEvent === 'save' && (
-  <>
-    <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
-      <div className="text-7xl font-extrabold text-yellow-400 drop-shadow-xl animate-wiggle">
-        🧤🥅🏑 ¡QUE ATAJADAAAAAA!<br />✨ ¡Aquí nooooo! 🧱🧱🧱 ✨
-      </div>
-    </div>
-
-    {/* Confetti pieces */}
-    {Array.from({ length: 40 }).map((_, i) => {
-      const left = Math.random() * 100;
-      const delay = Math.random() * 0.6;
-      const hue = Math.random() * 360;
-      const size = 6 + Math.random() * 12;
-      return (
-        <div
-          key={`conf-${i}`}
-          className="confetti-piece"
-          style={{
-            left: `${left}vw`,
-            background: `linear-gradient(45deg, hsl(${hue} 80% 55%), hsl(${(hue + 60) % 360} 80% 55%))`,
-            width: `${size}px`,
-            height: `${size * 1.6}px`,
-            animation: `confetti-fall ${1.4 + Math.random() * 0.8}s linear ${delay}s forwards`
-          }}
-        />
-      );
-    })}
-  </>
-)}
-
-<TeamSetupModal isOpen={showSetupModal} onSave={handleTeamSetupSave} />
-</div>
-);
+  );
 }
