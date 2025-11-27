@@ -491,8 +491,8 @@ export default function MatchPage() {
       {!isAdmin && visibleEvent?.type === 'goal' && visibleEvent?.team === 'team2' && (
         <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-50">
           <div className="text-6xl font-extrabold text-white drop-shadow-xl text-center">
-            <div className="text-5xl">😭⚽ ¡Gol visitante! 😭</div>
-            <div className="text-xl text-gray-300 mt-2">No festejamos... anota para revisar</div>
+            <div className="text-5xl">😭⚽ ¡Gol del rival! 😭</div>
+            <div className="text-xl text-gray-300 mt-2">No se festeja... ánimo chicas!!!</div>
           </div>
           {/* lluvia de gotas azules */}
           {Array.from({ length: 40 }).map((_, i) => {
@@ -522,13 +522,37 @@ export default function MatchPage() {
       )}
 
       {/* ATAJADA (save) visual para espectadores */}
-      {!isAdmin && visibleEvent?.type === 'save' && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-50">
-          <div className="text-6xl font-extrabold text-blue-300 drop-shadow-xl animate-wiggle text-center">
-            🧤 ¡ATAJADÓN!<br />✨ ¡Aquí nooooo! ✨
-          </div>
-        </div>
-      )}
+{!isAdmin && visibleEvent?.type === 'save' && (
+  <>
+    <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-50">
+      <div className="text-6xl font-extrabold text-blue-300 drop-shadow-xl animate-wiggle text-center">
+        🧤 ¡QUE ATAJADA!<br />🧱✨ ¡Aquí nooooo! ✨🧱
+      </div>
+    </div>
+
+    {/* confetti pieces */}
+    {Array.from({ length: 40 }).map((_, i) => {
+      const left = Math.random() * 100;
+      const delay = Math.random() * 0.6;
+      const hue = Math.random() * 360;
+      const size = 6 + Math.random() * 12;
+      return (
+        <div
+          key={`save-conf-${i}`}
+          className="confetti-piece"
+          style={{
+            left: `${left}vw`,
+            background: `linear-gradient(45deg, hsl(${hue} 80% 55%), hsl(${(hue + 60) % 360} 80% 55%))`,
+            width: `${size}px`,
+            height: `${size * 1.6}px`,
+            animation: `confetti-fall ${1.4 + Math.random() * 0.8}s linear ${delay}s forwards`
+          }}
+        />
+      );
+    })}
+  </>
+)}
+
 
       {/* Global animation styles (confetti etc) */}
       <style jsx global>{`
