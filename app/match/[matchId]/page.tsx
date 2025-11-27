@@ -12,14 +12,13 @@ import Scoreboard from './components/Scoreboard';
 import EventModal from './components/EventModal';
 import GoalHistory from './components/GoalHistory';
 
-type Team = {
-  name: string;
-  logo?: string;
-  color?: string;
-  players?: any[]; // player objects from TeamSetupModal
-};
+type Team = { name: string; logo?: string; color?: string; players?: any[] };
 
-type MatchEvent = { type: 'goal' | 'save'; timestamp: number };
+type MatchEvent = {
+  type: 'goal' | 'save';
+  timestamp: number;
+  team?: 'team1' | 'team2';
+};
 
 type GoalRecord = {
   id: string;
@@ -55,6 +54,7 @@ export default function MatchPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const matchId = params.matchId as string;
+  // Mantienes el PIN en la URL por ahora (como pediste)
   const adminParam = searchParams.get('admin') ?? null;
 
   const [matchData, setMatchData] = useState<MatchData | null>(null);
@@ -62,7 +62,7 @@ export default function MatchPage() {
   const [showSetupModal, setShowSetupModal] = useState(false);
   const [displayTime, setDisplayTime] = useState<number>(0);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [visibleEvent, setVisibleEvent] = useState< 'goal' | 'save' | null >(null);
+  const [visibleEvent, setVisibleEvent] = useState<MatchEvent | null>(null);
 
   // EventModal state (admin flow)
   const [eventModalOpen, setEventModalOpen] = useState(false);
@@ -70,15 +70,6 @@ export default function MatchPage() {
 
   const matchRef = useRef<any>(null);
   const matchDataRef = useRef<MatchData | null>(null);
-  const prevGoalsCountRef = useRef<number>(0);
-
-  // helper: SHA-256 used to compare adminParam with hash in DB
-  const hashSha256 = async (text: string) => {
-    const enc = new TextEncoder();
-    const data = enc.encode(text);
-    const buf = await crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
-  };
 
   // ---------- Firestore snapshot ----------
   useEffect(() => {
@@ -86,66 +77,70 @@ export default function MatchPage() {
     const ref = doc(db, 'matches', matchId);
     matchRef.current = ref;
 
-    const unsubscribe = onSnapshot(ref, (snap) => {
-      if (!snap.exists()) {
-        // if adminParam present, create initial doc
-        if (adminParam) {
-          const initial: MatchData = {
-            quarter: 1,
-            teams: {
-              team1: { name: 'Equipo Local', color: '#FF0000', players: [] },
-              team2: { name: 'Equipo Visitante', color: '#0000FF', players: [] }
-            },
-            score: { team1: 0, team2: 0 },
-            running: false,
-            status: 'active',
-            quarterDuration: 600,
-            configured: false,
-            remaining: 600,
-            startTime: null,
-            event: null,
-            adminPinHash: null,
-            goals: []
-          };
-          setDoc(ref, initial).catch(console.error);
-          setMatchData(initial);
-          matchDataRef.current = initial;
-          setShowSetupModal(true);
-          setLoading(false);
-          return;
-        } else {
-          setMatchData(null);
-          setLoading(false);
-          return;
+    const unsubscribe = onSnapshot(
+      ref,
+      (snap) => {
+        if (!snap.exists()) {
+          // Si param admin existe y doc no existe, creamos uno inicial (como antes)
+          if (adminParam) {
+            const initial: MatchData = {
+              quarter: 1,
+              teams: {
+                team1: { name: 'Equipo Local', color: '#FF0000', players: [] },
+                team2: { name: 'Equipo Visitante', color: '#0000FF', players: [] }
+              },
+              score: { team1: 0, team2: 0 },
+              running: false,
+              status: 'active',
+              quarterDuration: 600,
+              configured: false,
+              remaining: 600,
+              startTime: null,
+              event: null,
+              adminPinHash: null,
+              goals: []
+            };
+            setDoc(ref, initial).catch(console.error);
+            setMatchData(initial);
+            matchDataRef.current = initial;
+            setShowSetupModal(true);
+            setLoading(false);
+            return;
+          } else {
+            setMatchData(null);
+            setLoading(false);
+            return;
+          }
         }
+
+        const data = snap.data() as any;
+        const remainingFromDoc = data.remaining ?? data.time ?? undefined;
+
+        const mapped: MatchData = {
+          quarter: data.quarter ?? 1,
+          teams: data.teams ?? { team1: { name: 'Equipo Local', players: [] }, team2: { name: 'Equipo Visitante', players: [] } },
+          score: data.score ?? { team1: 0, team2: 0 },
+          running: data.running ?? false,
+          status: data.status ?? 'active',
+          quarterDuration: data.quarterDuration ?? (remainingFromDoc ?? 600),
+          configured: data.configured ?? false,
+          sponsorLogo: data.sponsorLogo ?? '',
+          remaining: remainingFromDoc ?? (data.quarterDuration ?? 600),
+          startTime: data.startTime ?? null,
+          event: data.event ?? null,
+          adminPinHash: data.adminPinHash ?? null,
+          goals: data.goals ?? []
+        };
+
+        matchDataRef.current = mapped;
+        setMatchData(mapped);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Firestore onSnapshot error', err);
+        setLoading(false);
       }
-
-      const data = snap.data() as any;
-      const remainingFromDoc = data.remaining ?? data.time ?? undefined;
-
-      const mapped: MatchData = {
-        quarter: data.quarter ?? 1,
-        teams: data.teams ?? { team1: { name: 'Equipo Local', players: [] }, team2: { name: 'Equipo Visitante', players: [] } },
-        score: data.score ?? { team1: 0, team2: 0 },
-        running: data.running ?? false,
-        status: data.status ?? 'active',
-        quarterDuration: data.quarterDuration ?? (remainingFromDoc ?? 600),
-        configured: data.configured ?? false,
-        sponsorLogo: data.sponsorLogo ?? '',
-        remaining: remainingFromDoc ?? (data.quarterDuration ?? 600),
-        startTime: data.startTime ?? null,
-        event: data.event ?? null,
-        adminPinHash: data.adminPinHash ?? null,
-        goals: data.goals ?? []
-      };
-
-      matchDataRef.current = mapped;
-      setMatchData(mapped);
-      setLoading(false);
-    }, (err) => {
-      console.error('Firestore onSnapshot error', err);
-      setLoading(false);
-    });
+    );
 
     return () => unsubscribe();
   }, [matchId, adminParam]);
@@ -166,9 +161,11 @@ export default function MatchPage() {
         return;
       }
       try {
-        const hashed = await hashSha256(adminParam);
-        setIsAdmin(hashed === matchData.adminPinHash);
-      } catch (err) {
+        const enc = new TextEncoder();
+        const buf = await crypto.subtle.digest('SHA-256', enc.encode(adminParam));
+        const hash = Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+        setIsAdmin(hash === matchData.adminPinHash);
+      } catch {
         setIsAdmin(false);
       }
     };
@@ -201,20 +198,15 @@ export default function MatchPage() {
   // ---------- visible event for spectator animation ----------
   useEffect(() => {
     if (!matchData?.event) return;
-    setVisibleEvent(matchData.event.type);
+    // ahora event puede traer team
+    setVisibleEvent(matchData.event);
     const t = setTimeout(() => setVisibleEvent(null), 3000);
     return () => clearTimeout(t);
   }, [matchData?.event?.timestamp]);
 
-  // ---------- handle new goals to keep prevGoalsCountRef ----------
-  useEffect(() => {
-    prevGoalsCountRef.current = (matchData?.goals ?? []).length;
-  }, [matchData?.goals]);
-
-  // ---------- helpers to update Firestore (must be admin) ----------
+  // ---------- Helpers para actualizar Firestore (solo admin) ----------
   const updateMatch = async (updates: Partial<MatchData>) => {
     if (!matchRef.current) return;
-    // only allow if admin verified
     if (!isAdmin) {
       console.warn('Try to write but not admin');
       return;
@@ -257,29 +249,21 @@ export default function MatchPage() {
   };
 
   // ---------- score + / - handlers ----------
-  // open event modal on + so admin can choose player (or free-text)
   const handlePlus = (team: 'team1' | 'team2') => {
     if (!isAdmin) return;
     setEventTeam(team);
     setEventModalOpen(true);
   };
 
-  // handle negative: remove last goal by team (admin)
   const handleMinus = async (team: 'team1' | 'team2') => {
     if (!isAdmin || !matchData) return;
     const currentGoals = matchData.goals ?? [];
-    // find last goal for team
-    const idx = [...currentGoals].reverse().findIndex(g => g.team === team);
-    if (idx === -1) {
-      // nothing to remove, but still decrement score? user wanted rectify: if no goal, do nothing
-      return;
-    }
-    // index from start:
+    const idx = [...currentGoals].reverse().findIndex((g) => g.team === team);
+    if (idx === -1) return;
     const targetIndex = currentGoals.length - 1 - idx;
     const newGoals = currentGoals.filter((_, i) => i !== targetIndex);
-    // recalc score
     const newScore = { team1: 0, team2: 0 };
-    newGoals.forEach(g => newScore[g.team]++);
+    newGoals.forEach((g) => newScore[g.team]++);
     try {
       await updateDoc(matchRef.current, { goals: newGoals, score: newScore } as any);
     } catch (err) {
@@ -287,22 +271,19 @@ export default function MatchPage() {
     }
   };
 
-  // called from EventModal when admin confirms scorer (player object or free text)
+  // ---------- confirmar goleador (desde EventModal) ----------
   const confirmScorer = async (payload: { team: 'team1' | 'team2'; player?: any | null; freeText?: { name: string; number?: string } }) => {
     if (!isAdmin || !matchData) return;
-
     const { team, player, freeText } = payload;
 
-    // compute elapsedInQuarter and matchMinute
     const qDuration = matchData.quarterDuration ?? 600;
     const remainingInQuarter = displayTime;
-    const elapsedInQuarter = Math.max(0, Math.floor(qDuration - remainingInQuarter)); // seconds since quarter started
+    const elapsedInQuarter = Math.max(0, Math.floor(qDuration - remainingInQuarter));
     const secondsBefore = (matchData.quarter - 1) * qDuration;
     const matchMinuteTotalSeconds = secondsBefore + elapsedInQuarter;
     const matchMinute = Math.floor(matchMinuteTotalSeconds / 60);
 
     const now = Date.now();
-
     const goal: GoalRecord = {
       id: now.toString(),
       team,
@@ -316,7 +297,6 @@ export default function MatchPage() {
       freeText: !!freeText
     };
 
-    // append goal and update score + event
     const currentGoals = matchData.goals ?? [];
     const newGoals = [...currentGoals, goal];
     const newScore = { ...matchData.score };
@@ -326,7 +306,7 @@ export default function MatchPage() {
       await updateDoc(matchRef.current, {
         goals: newGoals,
         score: newScore,
-        event: { type: 'goal', timestamp: now }
+        event: { type: 'goal', team, timestamp: now }
       } as any);
     } catch (err) {
       console.error('confirmScorer update error', err);
@@ -336,15 +316,18 @@ export default function MatchPage() {
     }
   };
 
-  // ---------- small util ----------
-  const formatTime = (s: number) => {
-    const m = Math.floor(s/60);
-    const sec = s%60;
-    return `${m}:${sec.toString().padStart(2,'0')}`;
+  // ---------- trigger save (atajada) - admin button in header ----------
+  const triggerSave = async () => {
+    if (!isAdmin || !matchRef.current) return;
+    const now = Date.now();
+    try {
+      await updateDoc(matchRef.current, { event: { type: 'save', timestamp: now } } as any);
+    } catch (err) {
+      console.error('triggerSave error', err);
+    }
   };
 
-  // ---------- TeamSetup save handler (from TeamSetupModal) ----------
-  // TeamSetupModal must call onSave({ team1, team2, adminPin, adminPinHash })
+  // ---------- TeamSetup save handler ----------
   const handleTeamSetupSave = async (data: any) => {
     if (!matchRef.current) return;
     const updates: any = {
@@ -359,7 +342,6 @@ export default function MatchPage() {
     try {
       await updateDoc(matchRef.current, updates as any);
     } catch (err) {
-      // if update fails, try setDoc as fallback
       try {
         await setDoc(matchRef.current, updates as any, { merge: true });
       } catch (err2) {
@@ -369,7 +351,7 @@ export default function MatchPage() {
 
     setShowSetupModal(false);
 
-    // redirect to admin=PIN to make user admin immediately (only client side)
+    // mantienes PIN en URL por ahora
     if (data.adminPin) {
       router.push(`/match/${matchId}?admin=${encodeURIComponent(data.adminPin)}`);
     } else {
@@ -377,22 +359,70 @@ export default function MatchPage() {
     }
   };
 
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  // helper remove single goal by id (for admin) - used by GoalHistory remove button
+  async function removeGoalById(goalId: string) {
+    if (!isAdmin || !matchData) return;
+    const currentGoals = matchData.goals ?? [];
+    const newGoals = currentGoals.filter((g) => g.id !== goalId);
+    const scores = { team1: 0, team2: 0 };
+    newGoals.forEach((g) => scores[g.team]++);
+    try {
+      await updateDoc(matchRef.current, { goals: newGoals, score: scores } as any);
+    } catch (err) {
+      console.error('removeGoalById error', err);
+    }
+  }
+
   if (loading) {
-    return <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 flex items-center justify-center"><div className="text-white text-xl">Cargando partido...</div></div>;
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 flex items-center justify-center">
+        <div className="text-white text-xl">Cargando partido...</div>
+      </div>
+    );
   }
 
   if (!matchData) {
-    return <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 flex items-center justify-center"><div className="text-white text-xl text-center">Partido no encontrado<br/><span className="text-sm text-gray-400 mt-2">Código: {matchId}</span></div></div>;
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 flex items-center justify-center">
+        <div className="text-white text-xl text-center">
+          <p>Partido no encontrado</p>
+          <p className="text-sm text-gray-400 mt-2">Código: {matchId}</p>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 p-6">
-      <div className="text-center mb-6">
-        <h1 className="text-4xl font-bold text-white mb-2">🏑 Partido en Vivo</h1>
-        <p className="text-gray-300">Código: <span className="font-mono bg-black/30 px-2 py-1 rounded">{matchId}</span></p>
-        {isAdmin ? <p className="text-green-400 font-semibold mt-2">🔧 Modo Administrador</p> : <p className="text-blue-400 font-semibold mt-2">👀 Modo Espectador</p>}
+      {/* Header */}
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <h1 className="text-4xl font-bold text-white mb-2">🏑 Partido en Vivo</h1>
+          <p className="text-gray-300">Código: <span className="font-mono bg-black/30 px-2 py-1 rounded">{matchId}</span></p>
+          {isAdmin ? <p className="text-green-400 font-semibold mt-2">🔧 Modo Administrador</p> : <p className="text-blue-400 font-semibold mt-2">👀 Modo Espectador</p>}
+        </div>
+
+        {/* ATAJADA BUTTON (top-right in header) — solo admin */}
+        {isAdmin && (
+          <div className="ml-4">
+            <button
+              onClick={triggerSave}
+              title="Atajada (mostrar en espectadores)"
+              className="w-14 h-14 rounded-full bg-white/6 border border-white/20 flex items-center justify-center hover:scale-105 transition-transform"
+            >
+              <span role="img" aria-label="atajada" className="text-2xl">🧤</span>
+            </button>
+          </div>
+        )}
       </div>
 
+      {/* Scoreboard */}
       <Scoreboard
         matchData={matchData}
         displayTime={displayTime}
@@ -406,20 +436,17 @@ export default function MatchPage() {
         onMinus={handleMinus}
       />
 
-      {/* If admin open TeamSetupModal */}
       <TeamSetupModal isOpen={showSetupModal} onSave={handleTeamSetupSave} />
 
-      {/* Event modal: admin selects scorer or free-text */}
       <EventModal
         isOpen={eventModalOpen}
         team={eventTeam}
         players={(eventTeam && matchData.teams[eventTeam].players) ?? []}
         onCancel={() => { setEventModalOpen(false); setEventTeam(null); }}
         onConfirm={(payload) => confirmScorer(payload)}
-        dark // use dark background to match main
+        dark
       />
 
-      {/* Goal history (always visible for spectator; admin also can view) */}
       <div className="mt-6">
         <GoalHistory
           goals={matchData.goals ?? []}
@@ -430,31 +457,104 @@ export default function MatchPage() {
         />
       </div>
 
-      {/* Animations for spectator */}
-      {!isAdmin && visibleEvent === 'goal' && (
+      {/* ANIMACIONES PARA ESPECTADOR */}
+      {/* Gol team1: celebracion (confetti) */}
+      {!isAdmin && visibleEvent?.type === 'goal' && visibleEvent?.team === 'team1' && (
+        <>
+          <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-50">
+            <div className="text-7xl font-extrabold text-yellow-400 drop-shadow-xl animate-wiggle">🎉🏑 ¡¡¡GOOOOOL!!! 🏑🎉</div>
+          </div>
+          {/* confetti pieces */}
+          {Array.from({ length: 40 }).map((_, i) => {
+            const left = Math.random() * 100;
+            const delay = Math.random() * 0.6;
+            const hue = Math.random() * 360;
+            const size = 6 + Math.random() * 12;
+            return (
+              <div
+                key={`conf-${i}`}
+                className="confetti-piece"
+                style={{
+                  left: `${left}vw`,
+                  background: `linear-gradient(45deg, hsl(${hue} 80% 55%), hsl(${(hue + 60) % 360} 80% 55%))`,
+                  width: `${size}px`,
+                  height: `${size * 1.6}px`,
+                  animation: `confetti-fall ${1.4 + Math.random() * 0.8}s linear ${delay}s forwards`
+                }}
+              />
+            );
+          })}
+        </>
+      )}
+
+      {/* Gol team2: animacion triste (opcion A elegida) */}
+      {!isAdmin && visibleEvent?.type === 'goal' && visibleEvent?.team === 'team2' && (
         <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-50">
-          <div className="text-7xl font-extrabold text-yellow-400 drop-shadow-xl animate-bounce">🎉🏑 ¡¡¡GOOOOOL!!! 🏑🎉</div>
+          <div className="text-6xl font-extrabold text-white drop-shadow-xl text-center">
+            <div className="text-5xl">😭⚽ ¡Gol visitante! 😭</div>
+            <div className="text-xl text-gray-300 mt-2">No festejamos... anota para revisar</div>
+          </div>
+          {/* lluvia de gotas azules */}
+          {Array.from({ length: 40 }).map((_, i) => {
+            const left = Math.random() * 100;
+            const delay = Math.random() * 0.6;
+            const size = 6 + Math.random() * 8;
+            return (
+              <div
+                key={`drop-${i}`}
+                style={{
+                  position: 'fixed',
+                  left: `${left}vw`,
+                  top: '-10px',
+                  width: `${size}px`,
+                  height: `${size * 2}px`,
+                  background: 'linear-gradient(180deg,#7ec8ff,#2b93d6)',
+                  borderRadius: '50%',
+                  opacity: 0.9,
+                  zIndex: 60,
+                  pointerEvents: 'none',
+                  animation: `confetti-fall ${1.2 + Math.random() * 0.8}s linear ${delay}s forwards`,
+                }}
+              />
+            );
+          })}
         </div>
       )}
-      {!isAdmin && visibleEvent === 'save' && (
+
+      {/* ATAJADA (save) visual para espectadores */}
+      {!isAdmin && visibleEvent?.type === 'save' && (
         <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-50">
-          <div className="text-6xl font-extrabold text-blue-300 drop-shadow-xl animate-pulse">🧤 ¡Atajada! Aquí nooooo!</div>
+          <div className="text-6xl font-extrabold text-blue-300 drop-shadow-xl animate-wiggle text-center">
+            🧤 ¡ATAJADÓN!<br />✨ ¡Aquí nooooo! ✨
+          </div>
         </div>
       )}
+
+      {/* Global animation styles (confetti etc) */}
+      <style jsx global>{`
+        .confetti-piece {
+          position: fixed;
+          top: -10px;
+          width: 10px;
+          height: 14px;
+          opacity: 0.95;
+          z-index: 9999;
+          pointer-events: none;
+          transform-origin: center;
+        }
+        @keyframes confetti-fall {
+          0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+          100% { transform: translateY(110vh) rotate(720deg); opacity: 0.9; }
+        }
+        @keyframes wiggle {
+          0% { transform: translateX(0) rotate(0deg); }
+          25% { transform: translateX(-8px) rotate(-6deg); }
+          50% { transform: translateX(8px) rotate(6deg); }
+          75% { transform: translateX(-4px) rotate(-3deg); }
+          100% { transform: translateX(0) rotate(0deg); }
+        }
+        .animate-wiggle { animation: wiggle 0.9s ease-in-out both; }
+      `}</style>
     </div>
   );
-
-  // helper remove single goal by id (for admin) - used by GoalHistory remove button
-  async function removeGoalById(goalId: string) {
-    if (!isAdmin || !matchData) return;
-    const currentGoals = matchData.goals ?? [];
-    const newGoals = currentGoals.filter(g => g.id !== goalId);
-    const scores = { team1: 0, team2: 0 };
-    newGoals.forEach(g => scores[g.team]++);
-    try {
-      await updateDoc(matchRef.current, { goals: newGoals, score: scores } as any);
-    } catch (err) {
-      console.error('removeGoalById error', err);
-    }
-  }
 }

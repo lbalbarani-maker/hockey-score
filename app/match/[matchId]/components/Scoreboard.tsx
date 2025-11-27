@@ -22,17 +22,17 @@ type Props = {
   onStart: () => void;
   onPause: () => void;
   onResetQuarter: () => void;
-  onSetQuarter: (q:number) => void;
-  onSetQuarterDuration: (min:number) => void;
-  onPlus: (team: 'team1'|'team2') => void;
-  onMinus: (team: 'team1'|'team2') => void;
+  onSetQuarter: (q: number) => void;
+  onSetQuarterDuration: (min: number) => void;
+  onPlus: (team: 'team1' | 'team2') => void;
+  onMinus: (team: 'team1' | 'team2') => void;
 };
 
 export default function Scoreboard({ matchData, displayTime, isAdmin, onStart, onPause, onResetQuarter, onSetQuarter, onSetQuarterDuration, onPlus, onMinus }: Props) {
-  const formatTime = (s:number) => {
-    const m = Math.floor(s/60);
-    const sec = s%60;
-    return `${m}:${sec.toString().padStart(2,'0')}`;
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -57,16 +57,16 @@ export default function Scoreboard({ matchData, displayTime, isAdmin, onStart, o
 
         {/* Timer */}
         <div className="text-center">
-          <div className={`font-mono font-bold text-white mb-2 ${!isAdmin ? 'text-6xl':'text-4xl'}`}>{formatTime(displayTime)}</div>
-          <div className={`${!isAdmin ? 'text-2xl':'text-xl'} text-gray-300`}>Cuarto {matchData.quarter}</div>
+          <div className={`font-mono font-bold text-white mb-2 ${!isAdmin ? 'text-6xl' : 'text-4xl'}`}>{formatTime(displayTime)}</div>
+          <div className={`${!isAdmin ? 'text-2xl' : 'text-xl'} text-gray-300`}>Cuarto {matchData.quarter}</div>
           {matchData.running && <div className="text-blue-400 text-sm">▶ EN VIVO</div>}
           {matchData.status === 'paused' && <div className="text-yellow-400 text-sm">⏸ PAUSADO</div>}
 
           {isAdmin && (
             <div className="mt-2 flex justify-center gap-2">
-              <button onClick={() => onSetQuarterDuration(10)} className={`text-xs px-2 py-1 rounded ${matchData.quarterDuration===600 ? 'bg-white text-black':'bg-gray-600 text-white'}`}>10min</button>
-              <button onClick={() => onSetQuarterDuration(15)} className={`text-xs px-2 py-1 rounded ${matchData.quarterDuration===900 ? 'bg-white text-black':'bg-gray-600 text-white'}`}>15min</button>
-              <button onClick={() => onSetQuarterDuration(20)} className={`text-xs px-2 py-1 rounded ${matchData.quarterDuration===1200 ? 'bg-white text-black':'bg-gray-600 text-white'}`}>20min</button>
+              <button onClick={() => onSetQuarterDuration(10)} className={`text-xs px-2 py-1 rounded ${matchData.quarterDuration === 600 ? 'bg-white text-black' : 'bg-gray-600 text-white'}`}>10min</button>
+              <button onClick={() => onSetQuarterDuration(15)} className={`text-xs px-2 py-1 rounded ${matchData.quarterDuration === 900 ? 'bg-white text-black' : 'bg-gray-600 text-white'}`}>15min</button>
+              <button onClick={() => onSetQuarterDuration(20)} className={`text-xs px-2 py-1 rounded ${matchData.quarterDuration === 1200 ? 'bg-white text-black' : 'bg-gray-600 text-white'}`}>20min</button>
             </div>
           )}
         </div>
@@ -98,7 +98,14 @@ export default function Scoreboard({ matchData, displayTime, isAdmin, onStart, o
           </div>
 
           <div className="grid grid-cols-4 gap-2 mt-3">
-            {[1,2,3,4].map(q => <button key={q} onClick={() => onSetQuarter(q)} className="py-2 rounded bg-gray-700 text-white">{`Q${q}`}</button>)}
+            {[1, 2, 3, 4].map(q => (
+              <button
+                key={q}
+                onClick={() => onSetQuarter(q)}
+                className={`py-2 rounded font-bold ${q === matchData.quarter ? 'bg-red-500 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>
+                Q{q}
+              </button>
+            ))}
           </div>
 
           <div className="mt-3 grid grid-cols-2 gap-2">
